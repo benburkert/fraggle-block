@@ -11,38 +11,69 @@ module Fraggle
       attr_reader :connection
 
       def initialize(addrs = [])
-        @addrs = addrs
+        @addrs, @clock = addrs, 0
         connect
       end
 
       def rev
-        request = Request.new(:verb => REV)
+        request = Request.new(:tag => tick, :verb => REV)
         send(request).first
       end
 
-      def get(path, rev = nil)
-        request = Request.new(:path => path, :rev => rev, :verb => GET)
+      def latest_rev
+        rev.rev
+      end
+
+      def get(path, rev = latest_rev)
+        request = Request.new(:tag => tick, :path => path, :rev => rev, :verb => GET)
         send(request).first
       end
 
-      def getdir(path, rev = nil, offset = nil, limit = nil)
-        request = Request.new(:path => path, :rev => rev, :offset => offset, :limit => limit, :verb => GETDIR)
-        send(request)
-      end
-
-      def set(path, value, rev)
-        request = Request.new(:path => path, :value => value, :rev => rev, :verb => SET)
+      def getdir(path, offset = 0, rev = latest_rev)
+        request = Request.new(:tag => tick, :path => path, :rev => rev, :offset => offset, :verb => GETDIR)
         send(request).first
       end
 
-      def del(path, rev)
-        request = Request.new(:path => path, :rev => rev, :verb => DEL)
+      def getdir_all(path, rev = latest_rev)
+        responses, offset = [], 0
+
+        while(response = walk(path, offset, rev))
+          responses << response
+          offset += 1
+        end
+
+        responses
+      end
+
+      def set(path, value, rev = latest_rev)
+        request = Request.new(:tag => tick, :path => path, :value => value, :rev => rev, :verb => SET)
         send(request).first
       end
 
-      def walk(path, rev = nil)
-        request = Request.new(:path => path, :rev => rev, :verb => WALK)
-        send(request)
+      def del(path, rev = latest_rev)
+        request = Request.new(:tag => tick, :path => path, :rev => rev, :verb => DEL)
+        send(request).first
+      end
+
+      def walk(path, offset = 0, rev = latest_rev)
+        request = Request.new(:tag => tick, :path => path, :rev => rev, :offset => offset, :verb => WALK)
+        send(request).first
+      end
+
+      def walk_all(path, rev = latest_rev)
+        responses, offset = [], 0
+
+        while(response = walk(path, offset, rev))
+          responses << response
+          offset += 1
+        end
+
+        responses
+      end
+
+      def wait(path, rev = latest_rev)
+        request = Request.new(:tag => tick, :path => path, :rev => rev, :verb => WAIT)
+        send(request).first
       end
 
       def disconnect
@@ -70,9 +101,16 @@ module Fraggle
       end
 
       def find_all_of_the_nodes
-        walk('/ctl/node/*/addr').each do |node|
+        offset = 0
+
+        while(node = walk('/ctl/node/*/addr', offset))
           @addrs << node.value unless @addrs.include? node.value
+          offset += 1
         end
+      end
+
+      def to_s
+        addrs.join(',')
       end
 
     protected
@@ -80,6 +118,10 @@ module Fraggle
       def send(request)
         @connection.send(request)
         @connection.read
+      end
+
+      def tick
+        @clock += 1
       end
     end
   end

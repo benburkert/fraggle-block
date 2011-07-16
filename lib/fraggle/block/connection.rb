@@ -30,7 +30,6 @@ module Fraggle
       end
 
       def send(req)
-        req.tag = 0
         data = req.encode
         head = [data.length].pack("N")
         @sock.write(head+data)
@@ -38,14 +37,11 @@ module Fraggle
 
       def read
         responses = []
-        loop do
-          head = @sock.read(4)
-          length = head.unpack("N")[0]
-          data = @sock.read(length)
-          response = Response.decode(data)
-          responses << response if response.valid? 
-          break if response.done?
-        end
+        head = @sock.read(4)
+        length = head.unpack("N")[0]
+        data = @sock.read(length)
+        response = Response.decode(data)
+        responses << response if response.ok?
         responses
       end
     end
